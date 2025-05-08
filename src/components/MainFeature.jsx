@@ -14,14 +14,14 @@ const SPECIAL_FOOD_CHANCE = 0.2;
 
 // Direction constants
 const DIRECTIONS = {
-// Initial level
-const DEFAULT_LEVEL = 1;
-
   UP: { x: 0, y: -1 },
   DOWN: { x: 0, y: 1 },
   LEFT: { x: -1, y: 0 },
   RIGHT: { x: 1, y: 0 }
 };
+// Initial level
+const DEFAULT_LEVEL = 1;
+
 
 const MainFeature = ({ onScoreSubmit }) => {
   // Icon components
@@ -61,6 +61,8 @@ const MainFeature = ({ onScoreSubmit }) => {
   const gameLoopRef = useRef(null);
   const canvasRef = useRef(null);
   const lastRenderTimeRef = useRef(0);
+  const gameStartTimeRef = useRef(Date.now());
+  const shrinkMazeRef = useRef(false);
   const movingObstacleDirectionRef = useRef(1);
 
   // Initialize game
@@ -362,29 +364,34 @@ const MainFeature = ({ onScoreSubmit }) => {
   
   // Game loop
   useEffect(() => {
+    if (!isRunning || gameOver) return;
+
+    const gameLoop = () => {
+      const now = Date.now();
+      
       if (gameLoopRef.current) {
         cancelAnimationFrame(gameLoopRef.current);
       }
-      
+
       // If enough time has passed, update game state
       if (now - lastRenderTimeRef.current > speed) {
         updateGame();
         lastRenderTimeRef.current = now;
       }
-      
+
       // Check if special food needs to expire
       if (specialFood && now > specialFood.expiresAt) {
         setSpecialFood(null);
       }
-      
+
       // Update moving obstacles (level 3)
       if (level === 3 && isRunning && !gameOver) {
         setMovingObstacles(prevObstacles => {
           const direction = movingObstacleDirectionRef.current;
-          
+
           return prevObstacles.map(obstacle => {
             const newObstacle = { ...obstacle };
-            
+
             if (obstacle.direction === 'horizontal') {
               newObstacle.x += direction;
               // Bounce back when hitting boundary
@@ -398,22 +405,22 @@ const MainFeature = ({ onScoreSubmit }) => {
                 movingObstacleDirectionRef.current = -direction;
               }
             }
-            
+
             return newObstacle;
           });
         });
       }
-      
+
       // Shrinking maze in level 4
       if (level === 4 && isRunning && !gameOver && obstacles.length > 0) {
         // Every 15 seconds, add a new ring of walls around the edge
         const gameTime = Math.floor((now - gameStartTimeRef.current) / 1000);
-        
+
         if (gameTime % 15 === 0 && gameTime > 0 && !shrinkMazeRef.current) {
           shrinkMazeRef.current = true;
           const newRing = [];
           const shrinkLevel = Math.floor(gameTime / 15);
-          
+
           // Only add up to 5 shrink levels to keep game playable
           if (shrinkLevel <= 5) {
             // Add a new ring of walls
@@ -425,23 +432,19 @@ const MainFeature = ({ onScoreSubmit }) => {
               newRing.push({ x: shrinkLevel, y });
               newRing.push({ x: GRID_SIZE - 1 - shrinkLevel, y });
             }
-            
+
             setObstacles(prev => [...prev, ...newRing]);
           }
         } else if (gameTime % 15 !== 0) {
           shrinkMazeRef.current = false;
         }
       }
-      
+
       gameLoopRef.current = requestAnimationFrame(gameLoop);
-    if (!isRunning || gameOver) return;
-    
-    const gameStartTimeRef = useRef(Date.now());
-    const shrinkMazeRef = useRef(false);
-    
-    const gameLoop = () => {
-      const now = Date.now();
-      
+    };
+
+    gameLoopRef.current = requestAnimationFrame(gameLoop);
+    return () => cancelAnimationFrame(gameLoopRef.current);
   }, [isRunning, gameOver, speed, snake, direction, nextDirection, food, specialFood]);
   
   // Update game state
@@ -564,7 +567,7 @@ const MainFeature = ({ onScoreSubmit }) => {
       date: new Date().toISOString(),
       level,
       snakeLength: snake.length
-      snakeLength: snake.length,
+      snakeLength: snake.length
     
     toast.success(`Score saved: ${score} points!`);
     
@@ -798,8 +801,8 @@ const MainFeature = ({ onScoreSubmit }) => {
       ctx.fillStyle = 'white';
       ctx.textAlign = 'center';
       ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2);
+    }
   }, [snake, food, specialFood, obstacles, movingObstacles, teleportZones, isRunning, gameOver, score, direction]);
-  }, [snake, food, specialFood, isRunning, gameOver, score, direction]);
   
   // Initialize game on first render
   useEffect(() => {
