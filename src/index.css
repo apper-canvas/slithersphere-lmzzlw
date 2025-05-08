@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import 'react-toastify/dist/ReactToastify.css';
+
+@layer base {
+  body {
+    @apply bg-surface-100 dark:bg-surface-900 text-surface-800 dark:text-surface-100 min-h-screen font-sans;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading font-bold;
+  }
+  
+  h1 {
+    @apply text-3xl md:text-4xl lg:text-5xl;
+  }
+  
+  h2 {
+    @apply text-2xl md:text-3xl lg:text-4xl;
+  }
+  
+  h3 {
+    @apply text-xl md:text-2xl lg:text-3xl;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium transition-all duration-200 focus:outline-none;
+  }
+  
+  .btn-primary {
+    @apply bg-primary text-white hover:bg-primary-dark active:scale-95;
+  }
+  
+  .btn-secondary {
+    @apply bg-secondary text-white hover:bg-secondary-dark active:scale-95;
+  }
+  
+  .btn-accent {
+    @apply bg-accent text-white hover:opacity-90 active:scale-95;
+  }
+  
+  .btn-outline {
+    @apply border-2 border-primary text-primary hover:bg-primary hover:text-white active:scale-95;
+  }
+  
+  .game-canvas {
+    @apply border-4 border-primary-dark dark:border-primary rounded-xl bg-surface-200 dark:bg-surface-800;
+  }
+  
+  .game-pixel {
+    @apply rounded-sm border border-opacity-10;
+  }
+  
+  .game-control {
+    @apply p-3 rounded-full flex items-center justify-center text-2xl bg-primary-light text-white shadow-neu-light dark:shadow-neu-dark hover:bg-primary active:scale-95 transition-all duration-150;
+  }
+}
+
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .text-shadow {
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  
+  .text-shadow-lg {
+    text-shadow: 0 4px 8px rgba(0, 0, 0, 0.12);
+  }
+}
