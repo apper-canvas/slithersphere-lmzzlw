@@ -14,6 +14,9 @@ const SPECIAL_FOOD_CHANCE = 0.2;
 
 // Direction constants
 const DIRECTIONS = {
+// Initial level
+const DEFAULT_LEVEL = 1;
+
   UP: { x: 0, y: -1 },
   DOWN: { x: 0, y: 1 },
   LEFT: { x: -1, y: 0 },
@@ -35,14 +38,19 @@ const MainFeature = ({ onScoreSubmit }) => {
   const ZapIcon = getIcon("Zap");
   
   // Game state
+  const [obstacles, setObstacles] = useState([]);
+  const [movingObstacles, setMovingObstacles] = useState([]);
+  const [teleportZones, setTeleportZones] = useState([]);
   const [snake, setSnake] = useState([]);
   const [food, setFood] = useState(null);
   const [specialFood, setSpecialFood] = useState(null);
   const [direction, setDirection] = useState(DIRECTIONS.RIGHT);
   const [nextDirection, setNextDirection] = useState(DIRECTIONS.RIGHT);
   const [isRunning, setIsRunning] = useState(false);
+  const [level, setLevel] = useState(() => parseInt(localStorage.getItem('gameLevel') || DEFAULT_LEVEL));
   const [gameOver, setGameOver] = useState(false);
   const [score, setScore] = useState(0);
+  const [showLevelSelect, setShowLevelSelect] = useState(false);
   const [speed, setSpeed] = useState(INITIAL_SPEED);
   const [difficulty, setDifficulty] = useState('medium');
   const [showSettings, setShowSettings] = useState(false);
@@ -53,7 +61,8 @@ const MainFeature = ({ onScoreSubmit }) => {
   const gameLoopRef = useRef(null);
   const canvasRef = useRef(null);
   const lastRenderTimeRef = useRef(0);
-  
+  const movingObstacleDirectionRef = useRef(1);
+
   // Initialize game
   const initGame = useCallback(() => {
     // Reset state
@@ -68,13 +77,127 @@ const MainFeature = ({ onScoreSubmit }) => {
     setScore(0);
     placeFood();
     setSpecialFood(null);
-    
+    setupLevel(level);
+
     // Set speed based on difficulty
     let initialSpeed = INITIAL_SPEED;
     if (difficulty === 'easy') initialSpeed = INITIAL_SPEED + 50;
     if (difficulty === 'hard') initialSpeed = INITIAL_SPEED - 30;
+   
+    // Adjust for level difficulty
+    if (level > 1) {
+      initialSpeed = Math.max(MIN_SPEED, initialSpeed - (level * 10));
+    }
     
     setSpeed(initialSpeed);
+  }, [difficulty, level]);
+
+  // Setup level-specific obstacles and features
+  const setupLevel = useCallback((levelNum) => {
+    // Clear previous level data
+    setObstacles([]);
+    setMovingObstacles([]);
+    setTeleportZones([]);
+    
+    // Apply level-specific setup
+    switch(levelNum) {
+      case 2: // Level 2: Obstacle Course
+        setupObstacleCourse();
+        break;
+      case 3: // Level 3: Speed Demon
+        setupSpeedDemon();
+        break;
+      case 4: // Level 4: Maze Runner
+        setupMazeRunner();
+        break;
+      default: // Level 1: Classic
+        // No obstacles or special features
+        break;
+    }
+  }, []);
+
+  // Level 2: Basic obstacles
+  const setupObstacleCourse = () => {
+    const walls = [];
+    
+    // Horizontal walls
+    for (let x = 5; x < 15; x++) {
+      walls.push({ x, y: 5 });
+      walls.push({ x, y: 15 });
+    }
+    
+    // Vertical walls
+    for (let y = 6; y < 15; y++) {
+      if (y !== 10) { // Gap in the middle
+        walls.push({ x: 5, y });
+        walls.push({ x: 14, y });
+      }
+    }
+    
+    setObstacles(walls);
+  };
+
+  // Level 3: Moving obstacles and faster gameplay
+  const setupSpeedDemon = () => {
+    // Static obstacles
+    const walls = [];
+    
+    // Corner obstacles
+    for (let i = 0; i < 4; i++) {
+      for (let j = 0; j < 4; j++) {
+        walls.push({ x: i, y: j });
+        walls.push({ x: GRID_SIZE - 1 - i, y: j });
+        walls.push({ x: i, y: GRID_SIZE - 1 - j });
+        walls.push({ x: GRID_SIZE - 1 - i, y: GRID_SIZE - 1 - j });
+      }
+    }
+    
+    // Moving obstacles
+    const movingBlocks = [];
+    
+    // Horizontal moving obstacles
+    for (let y = 5; y < GRID_SIZE - 5; y += 5) {
+      movingBlocks.push({ x: 5, y, direction: 'horizontal' });
+    }
+    
+    // Vertical moving obstacles
+    for (let x = 5; x < GRID_SIZE - 5; x += 5) {
+      movingBlocks.push({ x, y: 5, direction: 'vertical' });
+    }
+    
+    setObstacles(walls);
+    setMovingObstacles(movingBlocks);
+    movingObstacleDirectionRef.current = 1;
+  };
+
+  // Level 4: Complex maze with teleport zones
+  const setupMazeRunner = () => {
+    const walls = [];
+    
+    // Create maze pattern
+    for (let x = 0; x < GRID_SIZE; x++) {
+      for (let y = 0; y < GRID_SIZE; y++) {
+        // Border walls
+        if (x === 0 || x === GRID_SIZE - 1 || y === 0 || y === GRID_SIZE - 1) {
+          walls.push({ x, y });
+          continue;
+        }
+        
+        // Maze pattern - inner walls
+        if ((x % 5 === 0 && y % 3 !== 0) || (y % 4 === 0 && x % 3 !== 0 && y !== GRID_SIZE/2)) {
+          walls.push({ x, y });
+        }
+      }
+    }
+    
+    // Add teleport zones
+    const teleports = [
+      { x: 3, y: 3, target: { x: GRID_SIZE - 4, y: GRID_SIZE - 4 } },
+      { x: GRID_SIZE - 4, y: 3, target: { x: 3, y: GRID_SIZE - 4 } },
+    ];
+    
+    setObstacles(walls);
+    setTeleportZones(teleports);
   }, [difficulty]);
   
   // Generate random position
@@ -90,12 +213,17 @@ const MainFeature = ({ onScoreSubmit }) => {
     return snake.some(segment => segment.x === pos.x && segment.y === pos.y);
   };
   
+  // Check if position has an obstacle
+  const isPositionObstacle = (pos) => {
+    return obstacles.some(obstacle => obstacle.x === pos.x && obstacle.y === pos.y);
+  };
+  
   // Place food in random location
   const placeFood = () => {
     let newFoodPosition;
     do {
       newFoodPosition = randomGridPosition();
-    } while (isPositionOnSnake(newFoodPosition));
+    } while (isPositionOnSnake(newFoodPosition) || isPositionObstacle(newFoodPosition));
     
     setFood(newFoodPosition);
     
@@ -105,7 +233,8 @@ const MainFeature = ({ onScoreSubmit }) => {
       do {
         specialFoodPosition = randomGridPosition();
       } while (
-        isPositionOnSnake(specialFoodPosition) || 
+        isPositionOnSnake(specialFoodPosition) ||
+        isPositionObstacle(specialFoodPosition) ||
         (newFoodPosition.x === specialFoodPosition.x && newFoodPosition.y === specialFoodPosition.y)
       );
       
@@ -224,13 +353,15 @@ const MainFeature = ({ onScoreSubmit }) => {
     }
   };
   
+  // Change game level
+  const changeLevel = (newLevel) => {
+    setLevel(newLevel);
+    localStorage.setItem('gameLevel', newLevel);
+    initGame();
+  };
+  
   // Game loop
   useEffect(() => {
-    if (!isRunning || gameOver) return;
-    
-    const gameLoop = () => {
-      const now = Date.now();
-      
       if (gameLoopRef.current) {
         cancelAnimationFrame(gameLoopRef.current);
       }
@@ -246,16 +377,71 @@ const MainFeature = ({ onScoreSubmit }) => {
         setSpecialFood(null);
       }
       
-      gameLoopRef.current = requestAnimationFrame(gameLoop);
-    };
-    
-    gameLoopRef.current = requestAnimationFrame(gameLoop);
-    
-    return () => {
-      if (gameLoopRef.current) {
-        cancelAnimationFrame(gameLoopRef.current);
+      // Update moving obstacles (level 3)
+      if (level === 3 && isRunning && !gameOver) {
+        setMovingObstacles(prevObstacles => {
+          const direction = movingObstacleDirectionRef.current;
+          
+          return prevObstacles.map(obstacle => {
+            const newObstacle = { ...obstacle };
+            
+            if (obstacle.direction === 'horizontal') {
+              newObstacle.x += direction;
+              // Bounce back when hitting boundary
+              if (newObstacle.x <= 1 || newObstacle.x >= GRID_SIZE - 2) {
+                movingObstacleDirectionRef.current = -direction;
+              }
+            } else {
+              newObstacle.y += direction;
+              // Bounce back when hitting boundary
+              if (newObstacle.y <= 1 || newObstacle.y >= GRID_SIZE - 2) {
+                movingObstacleDirectionRef.current = -direction;
+              }
+            }
+            
+            return newObstacle;
+          });
+        });
       }
-    };
+      
+      // Shrinking maze in level 4
+      if (level === 4 && isRunning && !gameOver && obstacles.length > 0) {
+        // Every 15 seconds, add a new ring of walls around the edge
+        const gameTime = Math.floor((now - gameStartTimeRef.current) / 1000);
+        
+        if (gameTime % 15 === 0 && gameTime > 0 && !shrinkMazeRef.current) {
+          shrinkMazeRef.current = true;
+          const newRing = [];
+          const shrinkLevel = Math.floor(gameTime / 15);
+          
+          // Only add up to 5 shrink levels to keep game playable
+          if (shrinkLevel <= 5) {
+            // Add a new ring of walls
+            for (let x = shrinkLevel; x < GRID_SIZE - shrinkLevel; x++) {
+              newRing.push({ x, y: shrinkLevel });
+              newRing.push({ x, y: GRID_SIZE - 1 - shrinkLevel });
+            }
+            for (let y = shrinkLevel + 1; y < GRID_SIZE - 1 - shrinkLevel; y++) {
+              newRing.push({ x: shrinkLevel, y });
+              newRing.push({ x: GRID_SIZE - 1 - shrinkLevel, y });
+            }
+            
+            setObstacles(prev => [...prev, ...newRing]);
+          }
+        } else if (gameTime % 15 !== 0) {
+          shrinkMazeRef.current = false;
+        }
+      }
+      
+      gameLoopRef.current = requestAnimationFrame(gameLoop);
+    if (!isRunning || gameOver) return;
+    
+    const gameStartTimeRef = useRef(Date.now());
+    const shrinkMazeRef = useRef(false);
+    
+    const gameLoop = () => {
+      const now = Date.now();
+      
   }, [isRunning, gameOver, speed, snake, direction, nextDirection, food, specialFood]);
   
   // Update game state
@@ -269,11 +455,42 @@ const MainFeature = ({ onScoreSubmit }) => {
       // Move head in current direction
       head.x += direction.x;
       head.y += direction.y;
+
+      // Check teleport zones (Level 4)
+      if (level === 4) {
+        const teleport = teleportZones.find(zone => zone.x === head.x && zone.y === head.y);
+        if (teleport) {
+          head.x = teleport.target.x;
+          head.y = teleport.target.y;
+        }
+      }
       
       // Check wall collision
       if (head.x < 0 || head.x >= GRID_SIZE || head.y < 0 || head.y >= GRID_SIZE) {
         handleGameOver();
         return prevSnake;
+      }
+
+      // Check obstacle collision
+      if (isPositionObstacle({ x: head.x, y: head.y })) {
+        handleGameOver();
+        return prevSnake;
+      }
+      
+      // Check moving obstacle collision (Level 3)
+      if (level === 3) {
+        for (const obstacle of movingObstacles) {
+          if (obstacle.x === head.x && obstacle.y === head.y) {
+            handleGameOver();
+            return prevSnake;
+          }
+        }
+      }
+      
+      // Level 4: Add score multiplier based on current maze shrink level
+      let scoreMultiplier = 1;
+      if (level === 4) {
+        scoreMultiplier = 1 + (obstacles.length > 76 ? Math.floor((obstacles.length - 76) / 36) * 0.5 : 0);
       }
       
       // Check self collision (skipping the tail as it will move)
@@ -289,12 +506,12 @@ const MainFeature = ({ onScoreSubmit }) => {
       
       // Check if eating food
       if (food && head.x === food.x && head.y === food.y) {
-        setScore(prevScore => prevScore + FOOD_POINTS);
+        setScore(prevScore => prevScore + Math.floor(FOOD_POINTS * scoreMultiplier));
         placeFood();
         // Speed up as snake grows
         setSpeed(prevSpeed => Math.max(MIN_SPEED, prevSpeed - SPEED_INCREMENT));
       } else if (specialFood && head.x === specialFood.x && head.y === specialFood.y) {
-        setScore(prevScore => prevScore + SPECIAL_FOOD_POINTS);
+        setScore(prevScore => prevScore + Math.floor(SPECIAL_FOOD_POINTS * scoreMultiplier));
         setSpecialFood(null);
         
         // Special effect - snake grows extra length
@@ -345,8 +562,9 @@ const MainFeature = ({ onScoreSubmit }) => {
       playerName: finalPlayerName,
       score,
       date: new Date().toISOString(),
+      level,
       snakeLength: snake.length
-    });
+      snakeLength: snake.length,
     
     toast.success(`Score saved: ${score} points!`);
     
@@ -435,7 +653,62 @@ const MainFeature = ({ onScoreSubmit }) => {
         CELL_SIZE
       );
     });
+
+    // Draw obstacles
+    obstacles.forEach(obstacle => {
+      ctx.fillStyle = '#333333';
+      ctx.fillRect(
+        obstacle.x * CELL_SIZE,
+        obstacle.y * CELL_SIZE,
+        CELL_SIZE,
+        CELL_SIZE
+      );
+      
+      // Add texture to walls
+      ctx.fillStyle = 'rgba(30, 30, 30, 0.5)';
+      ctx.fillRect(
+        obstacle.x * CELL_SIZE + 2,
+        obstacle.y * CELL_SIZE + 2,
+        CELL_SIZE - 4,
+        CELL_SIZE - 4
+      );
+    });
     
+    // Draw moving obstacles
+    movingObstacles.forEach(obstacle => {
+      ctx.fillStyle = '#7209B7';
+      ctx.fillRect(
+        obstacle.x * CELL_SIZE,
+        obstacle.y * CELL_SIZE,
+        CELL_SIZE,
+        CELL_SIZE
+      );
+      
+      // Add pulsing effect to moving obstacles
+      const pulseRate = (Date.now() % 800) / 800;
+      const pulseAlpha = 0.3 + 0.4 * Math.sin(pulseRate * Math.PI * 2);
+      
+      ctx.fillStyle = `rgba(255, 255, 255, ${pulseAlpha})`;
+      ctx.fillRect(
+        obstacle.x * CELL_SIZE + 4,
+        obstacle.y * CELL_SIZE + 4,
+        CELL_SIZE - 8,
+        CELL_SIZE - 8
+      );
+    });
+    
+    // Draw teleport zones
+    teleportZones.forEach(zone => {
+      const gradient = ctx.createRadialGradient(
+        zone.x * CELL_SIZE + CELL_SIZE/2, zone.y * CELL_SIZE + CELL_SIZE/2, 0,
+        zone.x * CELL_SIZE + CELL_SIZE/2, zone.y * CELL_SIZE + CELL_SIZE/2, CELL_SIZE
+      );
+      gradient.addColorStop(0, 'rgba(114, 9, 183, 0.8)');
+      gradient.addColorStop(1, 'rgba(114, 9, 183, 0.2)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(zone.x * CELL_SIZE, zone.y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+    });
+
     // Draw food
     if (food) {
       ctx.fillStyle = '#F72585';
@@ -525,7 +798,7 @@ const MainFeature = ({ onScoreSubmit }) => {
       ctx.fillStyle = 'white';
       ctx.textAlign = 'center';
       ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2);
-    }
+  }, [snake, food, specialFood, obstacles, movingObstacles, teleportZones, isRunning, gameOver, score, direction]);
   }, [snake, food, specialFood, isRunning, gameOver, score, direction]);
   
   // Initialize game on first render
@@ -544,11 +817,19 @@ const MainFeature = ({ onScoreSubmit }) => {
           <h2 className="text-xl md:text-2xl font-bold text-primary-dark dark:text-primary-light">
             SlitherSphere
           </h2>
+
+          <span className="text-sm font-medium bg-secondary-light text-white px-3 py-1 rounded-full">
+            Level {level}
+          </span>
           
           <div className="flex items-center gap-2">
             <div className="flex items-center bg-surface-100 dark:bg-surface-700 px-3 py-1 rounded-full">
               <TrophyIcon size={16} className="text-secondary mr-2" />
               <span className="font-semibold">{score}</span>
+            </div>
+            <div className="flex items-center bg-surface-100 dark:bg-surface-700 px-3 py-1 rounded-full">
+              <ZapIcon size={16} className="text-primary mr-2" />
+              <span className="text-sm font-semibold">{Math.floor(1000 / speed)}</span>
             </div>
             
             <button
@@ -573,34 +854,55 @@ const MainFeature = ({ onScoreSubmit }) => {
               <div className="bg-surface-50 dark:bg-surface-700 rounded-xl p-4">
                 <h3 className="font-semibold mb-3 text-sm">Game Settings</h3>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm mb-1">Difficulty</label>
-                    <div className="flex">
-                      {['easy', 'medium', 'hard'].map((level) => (
-                        <button
-                          key={level}
-                          onClick={() => setDifficulty(level)}
-                          className={`flex-1 py-1 text-sm ${
-                            difficulty === level 
-                              ? 'bg-primary text-white' 
-                              : 'bg-surface-200 dark:bg-surface-600 text-surface-700 dark:text-surface-300'
-                          } ${level === 'easy' ? 'rounded-l-lg' : ''} ${
-                            level === 'hard' ? 'rounded-r-lg' : ''
-                          }`}
-                        >
-                          {level.charAt(0).toUpperCase() + level.slice(1)}
-                        </button>
-                      ))}
-                    </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div className="col-span-1 md:col-span-2">
+                    <label className="block text-sm mb-1">Level Selection</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {[1, 2, 3, 4].map((lvl) => {
+                        const levelNames = {
+                          1: "Classic",
+                          2: "Obstacle Course",
+                          3: "Speed Demon",
+                          4: "Maze Runner"
+                        };
+                        
+                        return (
+                          <button
+                            key={lvl}
+                            onClick={() => changeLevel(lvl)}
+                            className={`py-1 text-sm ${
+                              level === lvl 
+                                ? 'bg-secondary text-white' 
+                                : 'bg-surface-200 dark:bg-surface-600 text-surface-700 dark:text-surface-300'
+                            } rounded-lg`}
+                          >
+                            {levelNames[lvl]}
+                          </button>
+                        );
+                      })}
+                    </div>                  
                   </div>
                   
                   <div>
-                    <label htmlFor="playerName" className="block text-sm mb-1">
-                      Your Name
-                    </label>
-                    <input
-                      id="playerName"
+                    <label className="block text-sm mb-1">Difficulty</label>
+                      <div className="flex">
+                        {['easy', 'medium', 'hard'].map((diffLevel) => (
+                          <button
+                            key={diffLevel}
+                            onClick={() => setDifficulty(diffLevel)}
+                            className={`flex-1 py-1 text-sm ${
+                              difficulty === diffLevel ? 'bg-primary text-white' : 'bg-surface-200 dark:bg-surface-600 text-surface-700 dark:text-surface-300'
+                            } ${diffLevel === 'easy' ? 'rounded-l-lg' : ''} ${diffLevel === 'hard' ? 'rounded-r-lg' : ''}`}
+                          >
+                            {diffLevel.charAt(0).toUpperCase() + diffLevel.slice(1)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="playerName" className="block text-sm mb-1">Your Name</label>
+                      <input id="playerName"
                       type="text"
                       value={playerName}
                       onChange={(e) => setPlayerName(e.target.value)}
@@ -641,6 +943,8 @@ const MainFeature = ({ onScoreSubmit }) => {
                 <h3 className="text-xl font-bold text-center mb-2">Game Over!</h3>
                 <p className="text-center mb-4">
                   Your final score: <span className="font-bold text-lg">{score}</span>
+                  <br />
+                  <span className="text-sm text-surface-500">Level {level}: {level === 1 ? "Classic" : level === 2 ? "Obstacle Course" : level === 3 ? "Speed Demon" : "Maze Runner"}</span>
                 </p>
                 
                 <div className="flex items-center gap-3">
@@ -729,11 +1033,11 @@ const MainFeature = ({ onScoreSubmit }) => {
             <div className="flex items-center">
               <ZapIcon size={16} className="text-primary mr-1" />
               <span className="text-sm font-medium">
-                Speed: {Math.floor(1000 / speed)} fps
+                Snake Length: {snake.length}
               </span>
             </div>
             <div className="text-sm font-medium">
-              Length: {snake.length}
+              Level: {level}
             </div>
           </div>
         </div>
