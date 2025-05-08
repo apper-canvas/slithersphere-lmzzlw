@@ -568,6 +568,7 @@ const MainFeature = ({ onScoreSubmit }) => {
       level,
       snakeLength: snake.length
       snakeLength: snake.length
+    });
     
     toast.success(`Score saved: ${score} points!`);
     
