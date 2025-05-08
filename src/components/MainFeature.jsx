@@ -200,7 +200,7 @@ const MainFeature = ({ onScoreSubmit }) => {
     
     setObstacles(walls);
     setTeleportZones(teleports);
-  }, [difficulty]);
+  };
   
   // Generate random position
   const randomGridPosition = () => {
