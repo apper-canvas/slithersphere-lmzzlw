@@ -566,8 +566,7 @@ const MainFeature = ({ onScoreSubmit }) => {
       score,
       date: new Date().toISOString(),
       level,
-      snakeLength: snake.length
-      snakeLength: snake.length
+     snakeLength: snake.length
     });
     
     toast.success(`Score saved: ${score} points!`);
